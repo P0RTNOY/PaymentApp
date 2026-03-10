@@ -17,6 +17,7 @@ from app.modules.auth import (
     ForgotPasswordRequest,
     ResetPasswordRequest,
 )
+from app.config.rate_limit import limiter
 from app.modules.auth.service import (
     AuthError,
     register as auth_register,
@@ -84,6 +85,7 @@ async def register_endpoint(body: RegisterRequest, request: Request) -> JSONResp
 # ── POST /v1/auth/login ─────────────────────────────────────────────────
 
 @router.post("/login")
+@limiter.limit("5/minute")
 async def login_endpoint(body: LoginRequest, request: Request) -> JSONResponse:
     """Authenticate with email and password."""
     try:

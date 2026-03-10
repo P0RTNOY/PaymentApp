@@ -109,3 +109,59 @@ async def get_single_transaction(
         return _wrap(result, 200)
     except TransactionError as e:
         return _err(e)
+
+
+import io
+import csv
+from fastapi.responses import StreamingResponse
+
+@router.get("/export/csv")
+async def export_transactions_csv(
+    current_user: Annotated[CurrentUser, Depends(require_permission("transactions.read"))]
+) -> StreamingResponse:
+    """
+    Export all transactions for a tenant as a streaming CSV.
+    """
+    async def iter_csv():
+        # Yield byte-encoded header
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow([
+            "transactionId", "provider", "providerTransactionId", "amount",
+            "currency", "status", "customerId", "createdAt"
+        ])
+        yield output.getvalue().encode("utf-8")
+        output.seek(0)
+        output.truncate(0)
+
+        # Paginate through all transactions
+        cursor = None
+        while True:
+            result = await list_transactions(current_user.tenant_id, limit=100, cursor=cursor)
+            items = result["items"]
+            
+            for item in items:
+                writer.writerow([
+                    item.get("transactionId", ""),
+                    item.get("provider", ""),
+                    item.get("providerTransactionId", ""),
+                    item.get("amount", ""),
+                    item.get("currency", ""),
+                    item.get("status", ""),
+                    item.get("customerId", ""),
+                    item.get("createdAt", "")
+                ])
+                yield output.getvalue().encode("utf-8")
+                output.seek(0)
+                output.truncate(0)
+                
+            cursor = result["meta"]["cursor"]
+            if not cursor:
+                break
+
+    return StreamingResponse(
+        iter_csv(),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=transactions_export.csv"}
+    )
+

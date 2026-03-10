@@ -63,6 +63,16 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # ── Rate Limiting ────────────────────────────────────────────────
+    from slowapi.errors import RateLimitExceeded
+    from slowapi import _rate_limit_exceeded_handler
+    from slowapi.middleware import SlowAPIMiddleware
+    from app.config.rate_limit import limiter
+
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    app.add_middleware(SlowAPIMiddleware)
+
     # ── Request ID middleware ────────────────────────────────────────
     @app.middleware("http")
     async def request_context_middleware(request: Request, call_next) -> Response:  # type: ignore[no-untyped-def]
@@ -102,6 +112,9 @@ def create_app() -> FastAPI:
     app.include_router(auth_router)
     app.include_router(me_router)
     app.include_router(transactions_router)
+    
+    from app.api.paybox import router as paybox_router
+    app.include_router(paybox_router)
     
     from app.api.documents import router as documents_router, worker_router
     app.include_router(documents_router)
